@@ -5,44 +5,44 @@ require 'spreadsheet'
 module Roo
   # Class for handling Excel-Spreadsheets
   class Excel < Roo::Base
+    extend Roo::Tempdir
     FORMULAS_MESSAGE = 'the spreadsheet gem does not support forumulas, so roo can not.'
-    CHARGUESS =
-      begin
-        require 'charguess'
-        true
-      rescue LoadError
-        false
-      end
+    CHARGUESS        =
+        begin
+          require 'charguess'
+          true
+        rescue LoadError
+          false
+        end
 
     attr_reader :workbook
 
     # Creates a new Excel spreadsheet object.
     # Parameter packed: :zip - File is a zip-file
     def initialize(filename, options = {})
-      packed = options[:packed]
+      packed       = options[:packed]
       file_warning = options[:file_warning] || :error
-      mode = options[:mode] || 'rb+'
+      mode         = options[:mode] || 'rb+'
 
       if is_stream?(filename)
         @workbook = ::Spreadsheet.open(filename, mode)
       else
         file_type_check(filename, '.xls', 'an Excel', file_warning, packed)
-        make_tmpdir do |tmpdir|
-          filename = download_uri(filename, tmpdir) if uri?(filename)
-          filename = open_from_stream(filename[7..-1], tmpdir) if filename.is_a?(::String) && filename[0, 7] == 'stream:'
-          filename = unzip(filename, tmpdir) if packed == :zip
+        tmpdir   = Roo::Excel.make_tempdir(nil, nil, nil)
+        filename = download_uri(filename, tmpdir) if uri?(filename)
+        filename = open_from_stream(filename[7..-1], tmpdir) if filename.is_a?(::String) && filename[0, 7] == 'stream:'
+        filename = unzip(filename, tmpdir) if packed == :zip
 
-          @filename = filename
-          unless File.file?(@filename)
-            fail IOError, "file #{@filename} does not exist"
-          end
-          @workbook = ::Spreadsheet.open(filename, mode)
+        @filename = filename
+        unless File.file?(@filename)
+          fail IOError, "file #{@filename} does not exist"
         end
+        @workbook = ::Spreadsheet.open(filename, mode)
       end
 
       super(filename, options)
       @formula = {}
-      @fonts = {}
+      @fonts   = {}
     end
 
     attr_reader :workbook
@@ -62,7 +62,7 @@ module Roo
 
     # this method lets you find the worksheet with the most data
     def longest_sheet
-      sheet(worksheets.inject do|m, o|
+      sheet(worksheets.inject do |m, o|
         o.row_count > m.row_count ? o : m
       end.name)
     end
@@ -116,6 +116,7 @@ module Roo
     def formula(_row, _col, _sheet = nil)
       fail NotImplementedError, FORMULAS_MESSAGE
     end
+
     alias_method :formula?, :formula
 
     # returns NO formulas in excel spreadsheets
@@ -161,14 +162,14 @@ module Roo
 
     def platform_specific_encoding(value)
       result =
-        case RUBY_PLATFORM.downcase
-        when /darwin|solaris/
-          value.encode Encoding::UTF_8
-        when /mswin32/
-          value.encode Encoding::ISO_8859_1
-        else
-          value
-        end
+          case RUBY_PLATFORM.downcase
+          when /darwin|solaris/
+            value.encode Encoding::UTF_8
+          when /mswin32/
+            value.encode Encoding::ISO_8859_1
+          else
+            value
+          end
       if every_second_null?(result)
         result = remove_every_second_null(result)
       end
@@ -190,7 +191,7 @@ module Roo
     def remove_every_second_null(str)
       result = ''
       0.upto(str.length / 2 - 1) do |i|
-        c = str[i * 2, 1]
+        c      = str[i * 2, 1]
         result += c
       end
       result
@@ -199,32 +200,32 @@ module Roo
     # helper function to set the internal representation of cells
     def set_cell_values(sheet, row, col, i, v, value_type, formula, _tr, font)
       # key = "#{y},#{x+i}"
-      key = [row, col + i]
-      @cell_type[sheet] = {} unless @cell_type[sheet]
+      key                    = [row, col + i]
+      @cell_type[sheet]      = {} unless @cell_type[sheet]
       @cell_type[sheet][key] = value_type
-      @formula[sheet] = {} unless @formula[sheet]
-      @formula[sheet][key] = formula  if formula
-      @cell[sheet]    = {} unless @cell[sheet]
-      @fonts[sheet] = {} unless @fonts[sheet]
-      @fonts[sheet][key] = font
+      @formula[sheet]        = {} unless @formula[sheet]
+      @formula[sheet][key]   = formula if formula
+      @cell[sheet]           = {} unless @cell[sheet]
+      @fonts[sheet]          = {} unless @fonts[sheet]
+      @fonts[sheet][key]     = font
 
       @cell[sheet][key] =
-        case value_type
-        when :float
-          v.to_f
-        when :string
-          v
-        when :date
-          v
-        when :datetime
-          @cell[sheet][key] = DateTime.new(v.year, v.month, v.day, v.hour, v.min, v.sec)
-        when :percentage
-          v.to_f
-        when :time
-          v
-        else
-          v
-        end
+          case value_type
+          when :float
+            v.to_f
+          when :string
+            v
+          when :date
+            v
+          when :datetime
+            @cell[sheet][key] = DateTime.new(v.year, v.month, v.day, v.hour, v.min, v.sec)
+          when :percentage
+            v.to_f
+          when :time
+            v
+          else
+            v
+          end
     end
 
     # ruby-spreadsheet has a font object so we're extending it
@@ -255,17 +256,17 @@ module Roo
       worksheet.each(0) do |row|
         (0..row.size).each do |cell_index|
           cell = row.at(cell_index)
-          next if cell.nil?  # skip empty cells
+          next if cell.nil? # skip empty cells
           next if cell.class == ::Spreadsheet::Formula && cell.value.nil? # skip empty formula cells
           value_type, v =
-            if date_or_time?(row, cell_index)
-              read_cell_date_or_time(row, cell_index)
-            else
-              read_cell(row, cell_index)
-            end
-          formula = tr = nil # TODO:???
-          col_index = cell_index + 1
-          font = row.format(cell_index).font
+              if date_or_time?(row, cell_index)
+                read_cell_date_or_time(row, cell_index)
+              else
+                read_cell(row, cell_index)
+              end
+          formula       = tr = nil # TODO:???
+          col_index     = cell_index + 1
+          font          = row.format(cell_index).font
           font.extend(ExcelFontExtensions)
           set_cell_values(sheet, row_index, col_index, 0, v, value_type, formula, tr, font)
         end # row
@@ -301,14 +302,14 @@ module Roo
       cell = cell.to_s.to_f
       if cell < 1.0
         value_type = :time
-        f = cell * 24.0 * 60.0 * 60.0
-        secs = f.round
-        h = (secs / 3600.0).floor
-        secs = secs - 3600 * h
-        m = (secs / 60.0).floor
-        secs = secs - 60 * m
-        s = secs
-        value = h * 3600 + m * 60 + s
+        f          = cell * 24.0 * 60.0 * 60.0
+        secs       = f.round
+        h          = (secs / 3600.0).floor
+        secs       = secs - 3600 * h
+        m          = (secs / 60.0).floor
+        secs       = secs - 60 * m
+        s          = secs
+        value      = h * 3600 + m * 60 + s
       else
         if row.at(idx).class == ::Spreadsheet::Formula
           datetime = row.send(:_datetime, cell)
@@ -316,10 +317,10 @@ module Roo
           datetime = row.datetime(idx)
         end
         if datetime.hour != 0 ||
-           datetime.min != 0 ||
-           datetime.sec != 0
+            datetime.min != 0 ||
+            datetime.sec != 0
           value_type = :datetime
-          value = datetime
+          value      = datetime
         else
           value_type = :date
           if row.at(idx).class == ::Spreadsheet::Formula
@@ -340,16 +341,16 @@ module Roo
       case cell
       when Float, Integer, Fixnum, Bignum
         value_type = :float
-        value = cell.to_f
+        value      = cell.to_f
       when ::Spreadsheet::Link
         value_type = :link
-        value = cell
+        value      = cell
       when String, TrueClass, FalseClass
         value_type = :string
-        value = cell.to_s
+        value      = cell.to_s
       else
         value_type = cell.class.to_s.downcase.to_sym
-        value = nil
+        value      = nil
       end # case
       [value_type, value]
     end

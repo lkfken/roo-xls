@@ -22,7 +22,7 @@ class Roo::Excel2003XML < Roo::Base
       end
       @doc = ::Roo::Utils.load_xml(@filename)
     end
-    namespace = @doc.namespaces.select { |_, urn| urn == 'urn:schemas-microsoft-com:office:spreadsheet' }.keys.last
+    namespace  = @doc.namespaces.select { |_, urn| urn == 'urn:schemas-microsoft-com:office:spreadsheet' }.keys.last
     @namespace = (namespace.nil? || namespace.empty?) ? 'ss' : namespace.split(':').last
     super(filename, options)
     @formula           = {}
@@ -195,44 +195,24 @@ class Roo::Excel2003XML < Roo::Base
     sheet_found = false
 
     @doc.xpath("/#{@namespace}:Workbook/#{@namespace}:Worksheet[@#{@namespace}:Name='#{sheet}']").each do |ws|
-<<<<<<< HEAD
-      sheet_found       = true
-      row               = 1
-      col               = 1
-      column_attributes = {}
-      idx               = 0
-=======
-      sheet_found = true
+      sheet_found   = true
       column_styles = {}
 
       # Column Styles
       col = 1
->>>>>>> 59ef3d6f80c0ac3aa0208c0daafd417c9e05bfa0
       ws.xpath("./#{@namespace}:Table/#{@namespace}:Column").each do |c|
-        skip_to_col = c["#{@namespace}:Index"].to_i
-        col = skip_to_col if skip_to_col > 0
-        col_style_name = c["#{@namespace}:StyleID"]
+        skip_to_col        = c["#{@namespace}:Index"].to_i
+        col                = skip_to_col if skip_to_col > 0
+        col_style_name     = c["#{@namespace}:StyleID"]
         column_styles[col] = col_style_name unless col_style_name.nil?
-        col += 1
+        col                += 1
       end
 
       # Rows
       row = 1
       ws.xpath("./#{@namespace}:Table/#{@namespace}:Row").each do |r|
-<<<<<<< HEAD
-        skip_to_row = r['Index'].to_i
-        row         = skip_to_row if skip_to_row > 0
-        style_name  = r['StyleID'] if r['StyleID']
-        r.xpath("./#{@namespace}:Cell").each do |c|
-          skip_to_col = c['Index'].to_i
-          col         = skip_to_col if skip_to_col > 0
-          if c['StyleID']
-            style_name = c['StyleID']
-          elsif style_name ||= column_attributes[c['Index']]
-          end
-=======
         skip_to_row = r["#{@namespace}:Index"].to_i
-        row = skip_to_row if skip_to_row > 0
+        row         = skip_to_row if skip_to_row > 0
 
         # Excel uses a 'Span' attribute on a 'Row' to indicate the presence of
         # empty rows to skip.
@@ -244,25 +224,20 @@ class Roo::Excel2003XML < Roo::Base
         col = 1
         r.xpath("./#{@namespace}:Cell").each do |c|
           skip_to_col = c["#{@namespace}:Index"].to_i
-          col = skip_to_col if skip_to_col > 0
+          col         = skip_to_col if skip_to_col > 0
 
           skip_next_cols = c["#{@namespace}:MergeAcross"].to_i
 
           cell_style_name = c["#{@namespace}:StyleID"]
-          style_name = cell_style_name || row_style_name || column_styles[col]
+          style_name      = cell_style_name || row_style_name || column_styles[col]
 
           # Cell Data
->>>>>>> 59ef3d6f80c0ac3aa0208c0daafd417c9e05bfa0
           c.xpath("./#{@namespace}:Data").each do |cell|
             formula    = cell['Formula']
             value_type = cell["#{@namespace}:Type"].downcase.to_sym
-<<<<<<< HEAD
             v          = cell.content
             str_v      = v
-=======
-            v = cell.content
-            str_v = v
->>>>>>> 59ef3d6f80c0ac3aa0208c0daafd417c9e05bfa0
+
             case value_type
             when :number
               v          = v.to_f
@@ -293,25 +268,16 @@ class Roo::Excel2003XML < Roo::Base
 
   def read_styles
     @doc.xpath("/#{@namespace}:Workbook/#{@namespace}:Styles/#{@namespace}:Style").each do |style|
-<<<<<<< HEAD
-      style_id                     = style['ID']
-      @style_definitions[style_id] = Roo::Excel2003XML::Font.new
-      if font = style.at_xpath("./#{@namespace}:Font")
-        @style_definitions[style_id].bold      = font['Bold']
-        @style_definitions[style_id].italic    = font['Italic']
-        @style_definitions[style_id].underline = font['Underline']
-=======
       style_id = style["#{@namespace}:ID"]
-      font = style.at_xpath("./#{@namespace}:Font")
+      font     = style.at_xpath("./#{@namespace}:Font")
       unless font.nil?
-        @style_definitions[style_id] = Roo::Excel2003XML::Font.new
+        @style_definitions[style_id]           = Roo::Excel2003XML::Font.new
         @style_definitions[style_id].bold      = font["#{@namespace}:Bold"]
         @style_definitions[style_id].italic    = font["#{@namespace}:Italic"]
         @style_definitions[style_id].underline = font["#{@namespace}:Underline"]
         @style_definitions[style_id].color     = font["#{@namespace}:Color"]
         @style_definitions[style_id].name      = font["#{@namespace}:FontName"]
         @style_definitions[style_id].size      = font["#{@namespace}:Size"]
->>>>>>> 59ef3d6f80c0ac3aa0208c0daafd417c9e05bfa0
       end
     end
   end

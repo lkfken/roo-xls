@@ -1,12 +1,12 @@
 require 'roo/xls/version'
 require 'roo/base'
 require 'spreadsheet'
+require 'tmpdir'
 
 module Roo
   # Class for handling Excel-Spreadsheets
   class Excel < Roo::Base
-    extend Roo::Tempdir
-    FORMULAS_MESSAGE = 'the spreadsheet gem does not support forumulas, so roo can not.'
+    FORMULAS_MESSAGE = 'the spreadsheet gem does not support formulas, so roo can not.'
     CHARGUESS        =
         begin
           require 'charguess'
@@ -28,14 +28,18 @@ module Roo
         @workbook = ::Spreadsheet.open(filename, mode)
       else
         file_type_check(filename, '.xls', 'an Excel', file_warning, packed)
-        tmpdir   = Roo::Excel.make_tempdir(nil, nil, nil)
-        filename = download_uri(filename, tmpdir) if uri?(filename)
-        filename = open_from_stream(filename[7..-1], tmpdir) if filename.is_a?(::String) && filename[0, 7] == 'stream:'
-        filename = unzip(filename, tmpdir) if packed == :zip
+        Dir.mktmpdir do |tmpdir|
+          filename = download_uri(filename, tmpdir) if uri?(filename)
+          if filename.is_a?(::String) && filename[0, 7] == 'stream:'
+            filename = open_from_stream(filename[7..-1], tmpdir)
+          end
+          filename = unzip(filename, tmpdir) if packed == :zip
 
-        @filename = filename
-        unless File.file?(@filename)
-          fail IOError, "file #{@filename} does not exist"
+          @filename = filename
+          unless File.file?(@filename)
+            raise IOError, "file #{@filename} does not exist"
+          end
+          @workbook = ::Spreadsheet.open(filename, mode)
         end
         @workbook = ::Spreadsheet.open(filename, mode)
       end
@@ -72,20 +76,16 @@ module Roo
       validate_sheet!(sheet)
 
       read_cells(sheet)
-      fail 'should be read' unless @cells_read[sheet]
+      raise 'should be read' unless @cells_read[sheet]
       row, col = normalize(row, col)
       if celltype(row, col, sheet) == :date
         yyyy, mm, dd = @cell[sheet][[row, col]].split('-')
         return Date.new(yyyy.to_i, mm.to_i, dd.to_i)
       end
       if celltype(row, col, sheet) == :string
-        return platform_specific_encoding(@cell[sheet][[row, col]])
+        platform_specific_encoding(@cell[sheet][[row, col]])
       else
-        if @cell[sheet] && @cell[sheet][[row, col]]
-          return @cell[sheet][[row, col]]
-        else
-          return nil
-        end
+        @cell[sheet] && @cell[sheet][[row, col]]
       end
     end
 
@@ -114,14 +114,14 @@ module Roo
 
     # returns NO formula in excel spreadsheets
     def formula(_row, _col, _sheet = nil)
-      fail NotImplementedError, FORMULAS_MESSAGE
+      raise NotImplementedError, FORMULAS_MESSAGE
     end
 
     alias_method :formula?, :formula
 
     # returns NO formulas in excel spreadsheets
     def formulas(_sheet = nil)
-      fail NotImplementedError, FORMULAS_MESSAGE
+      raise NotImplementedError, FORMULAS_MESSAGE
     end
 
     # Given a cell, return the cell's font
@@ -142,18 +142,18 @@ module Roo
 
     # converts name of a sheet to index (0,1,2,..)
     def sheet_no(name)
-      return name - 1 if name.is_a?(Fixnum)
+      return name - 1 if name.is_a?(Integer)
       i = 0
       worksheets.each do |worksheet|
         return i if name == normalize_string(worksheet.name)
         i += 1
       end
-      fail StandardError, "sheet '#{name}' not found"
+      raise StandardError, "sheet '#{name}' not found"
     end
 
     def normalize_string(value)
       value = every_second_null?(value) ? remove_every_second_null(value) : value
-      if CHARGUESS && encoding = CharGuess.guess(value)
+      if CHARGUESS && (encoding = CharGuess.guess(value))
         encoding.encode Encoding::UTF_8
       else
         platform_specific_encoding(value)
@@ -170,9 +170,7 @@ module Roo
           else
             value
           end
-      if every_second_null?(result)
-        result = remove_every_second_null(result)
-      end
+      result = remove_every_second_null(result) if every_second_null?(result)
       result
     end
 
@@ -208,8 +206,7 @@ module Roo
       @cell[sheet]           = {} unless @cell[sheet]
       @fonts[sheet]          = {} unless @fonts[sheet]
       @fonts[sheet][key]     = font
-
-      @cell[sheet][key] =
+      @cell[sheet][key]      =
           case value_type
           when :float
             v.to_f
@@ -305,17 +302,18 @@ module Roo
         f          = cell * 24.0 * 60.0 * 60.0
         secs       = f.round
         h          = (secs / 3600.0).floor
-        secs       = secs - 3600 * h
+        secs       -= 3600 * h
         m          = (secs / 60.0).floor
-        secs       = secs - 60 * m
+        secs       -= 60 * m
         s          = secs
         value      = h * 3600 + m * 60 + s
       else
-        if row.at(idx).class == ::Spreadsheet::Formula
-          datetime = row.send(:_datetime, cell)
-        else
-          datetime = row.datetime(idx)
-        end
+        datetime =
+            if row.at(idx).class == ::Spreadsheet::Formula
+              row.send(:_datetime, cell)
+            else
+              row.datetime(idx)
+            end
         if datetime.hour != 0 ||
             datetime.min != 0 ||
             datetime.sec != 0
@@ -323,12 +321,13 @@ module Roo
           value      = datetime
         else
           value_type = :date
-          if row.at(idx).class == ::Spreadsheet::Formula
-            value = row.send(:_date, cell)
-          else
-            value = row.date(idx)
-          end
-          value = sprintf('%04d-%02d-%02d', value.year, value.month, value.day)
+          value      =
+              if row.at(idx).class == ::Spreadsheet::Formula
+                row.send(:_date, cell)
+              else
+                row.date(idx)
+              end
+          value      = sprintf('%04d-%02d-%02d', value.year, value.month, value.day)
         end
       end
       [value_type, value]
@@ -339,7 +338,7 @@ module Roo
     def read_cell(row, idx)
       cell = read_cell_content(row, idx)
       case cell
-      when Float, Integer, Fixnum, Bignum
+      when Float, Integer
         value_type = :float
         value      = cell.to_f
       when ::Spreadsheet::Link
